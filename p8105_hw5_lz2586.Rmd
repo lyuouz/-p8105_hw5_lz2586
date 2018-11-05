@@ -11,16 +11,43 @@ output:
 library(tidyverse)
 library(readxl)
 library(purrr)
-
+library(stringr)
 
 ```
 
 ### Problem 1
 
 ```{r}
+# function for reading each 
+read_data <- function(data_name){
+  dta_address <- str_c('./data/', data_name)
+  dta <- read_csv(dta_address) %>% 
+    mutate(id = data_name) %>% 
+    gather(key = week, value = result, week_1:week_8) %>% 
+    mutate(week = str_replace(week, 'week_', ''),
+           id = str_replace(id, '.csv', ''),
+           category = ifelse(str_detect(id, 'con') == TRUE, 'con', 'exp'),
+           id = str_sub(id, start = 5L),
+           id = as.numeric(id)) %>% 
+    select(category, id, everything())
+}
 
+# read file names in a list
+l <- list.files('/Users/zhanglvou/Desktop/GoMailman/Fall_2018/data_science/homework/p8105_hw5_lz2586/data') 
 
+df <- map_df(l, read_data)
 
+df %>% 
+  ggplot(aes(x = week, y = result, group = interaction(category, id), color = category)) +
+  geom_line()
 
 ```
+
+### Problem 2
+
+
+
+
+
+
 
