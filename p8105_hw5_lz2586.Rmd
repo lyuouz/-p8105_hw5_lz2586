@@ -12,6 +12,7 @@ library(tidyverse)
 library(readxl)
 library(purrr)
 library(stringr)
+library(lubridate)
 
 ```
 
@@ -45,6 +46,88 @@ df %>%
 
 ### Problem 2
 
+```{r import_homicide}
+# data import
+
+# a function to change the date variable to a certain "date format"
+date_format <- function(date){
+  year = str_sub(date, end = 4L)
+  month = str_sub(date, start = 5L, end = -3L)
+  day = str_sub(date, start = -2L, end = -1L)
+  
+  f_date = str_c(year, month, day, sep = '/')
+  f_date = as.Date(f_date, format = '%Y/%m/%d')
+  
+  f_date
+}
+
+homicide <- read_csv('./data-homicides-master/homicide-data.csv') %>% 
+  mutate(reported_date = date_format(reported_date),
+         victim_age = as.numeric(victim_age),
+         city_state = str_c(city, state, sep = ', '),
+         status = ifelse(disposition == 'Closed by arrest', 1, 0)) %>% 
+  select(uid, reported_date, city_state, everything())
+
+# this dataset has the number of cases for each disposition summed by cities in a readable format
+city_homicide <- homicide %>% 
+  group_by(city_state, status) %>% 
+  summarize(n_homicide = n()) %>% 
+  spread(key = status, value = n_homicide) %>% 
+  rename('unsolved' = `0`,
+         'solved' = `1`) %>% 
+  mutate(total = unsolved + solved) %>% 
+  filter(city_state != 'Tulsa, AL')
+
+# visualize in ggplot
+city_homicide %>% 
+  gather(key = status, value = n_cases, unsolved:total) %>% 
+  filter(status == 'solved' | status == 'unsolved') %>% 
+  ggplot(aes(x = city_state, y = n_cases, fill = status)) + geom_bar(stat = 'identity') +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+
+```
+
+* This dataset contains demographic information of the vicitim and the site where the murder happened. There are `r nrow(homicide)` rows and `r ncol(homicde)` variables.  
+* Demographic information of the victim include: name, race, age, gender  
+* Location information include: state, city, longitude and latitude.  
+* There is a variable "disposition" that describes the status of the case. It can be closed without arrest, closed by arrest or open/no arrest.  
+
+
+```{r}
+# Baltimore subset
+city_homicide_baltimore <- city_homicide %>%  
+  filter(city_state == 'Baltimore, MD')
+
+baltimore_prop <- prop.test(city_homicide_baltimore$unsolved, city_homicide_baltimore$total, correct = TRUE) %>% 
+  broom::tidy()
+
+# estimate and confidence intervals
+baltimore_prop %>% 
+  select(estimate, conf.low, conf.high)
+
+# a function to do the prop.test and tidy the results
+prop_tidy <- function(x, n){
+  
+  output = prop.test(x,n)
+  broom::tidy(output)
+}
+
+# using map to iterate on each row
+homicide_prop <- city_homicide %>% 
+  mutate(
+    output = map2(.x = unsolved, .y = total, prop_tidy)
+  ) %>% 
+  unnest() %>% 
+  select(city_state:estimate, conf.low, conf.high)
+
+# plotting estimate and CIs
+homicide_prop %>% 
+  ggplot(aes(x = reorder(city_state, estimate), y = estimate)) +
+  geom_point() +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+  
+```
 
 
 
