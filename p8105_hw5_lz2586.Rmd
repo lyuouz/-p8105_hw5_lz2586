@@ -18,6 +18,8 @@ library(lubridate)
 
 ### Problem 1
 
+Start with a function that reads data from the folder and cleans the data. Including tidying, renaming variable names and changing variable types.
+
 ```{r}
 # function for reading each 
 read_data <- function(data_name){
@@ -32,19 +34,35 @@ read_data <- function(data_name){
            id = as.numeric(id)) %>% 
     select(category, id, everything())
 }
+```
 
+Put file names in a list with `list.files` and use map to iterate for all participants. 
+
+```{r}
 # read file names in a list
 l <- list.files('/Users/zhanglvou/Desktop/GoMailman/Fall_2018/data_science/homework/p8105_hw5_lz2586/data') 
 
+# Use map to iterate
 df <- map_df(l, read_data)
 
+```
+
+Make the spaghetti plot. Using different color for control or experiment group. 
+
+```{r}
 df %>% 
   ggplot(aes(x = week, y = result, group = interaction(category, id), color = category)) +
   geom_line()
 
 ```
 
+From the plot:  
+* The control group are showed in red lines. In these groups, the values measured fluctuates but are generally stable over time.  
+* The experiment group are in green lines. The measured values have increased over time in general.
+
 ### Problem 2
+
+
 
 ```{r import_homicide}
 # data import
