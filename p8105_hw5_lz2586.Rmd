@@ -40,7 +40,7 @@ Put file names in a list with `list.files` and use map to iterate for all partic
 
 ```{r}
 # read file names in a list
-l <- list.files('/Users/zhanglvou/Desktop/GoMailman/Fall_2018/data_science/homework/p8105_hw5_lz2586/data') 
+l <- list.files('./data') 
 
 # Use map to iterate
 df <- map_df(l, read_data)
@@ -62,10 +62,11 @@ From the plot:
 
 ### Problem 2
 
+#### Data import and cleaning
 
+I notice that in the original dataset, the variable "reported date" is a string variable and cannot be recognized as date. This is because year, month and day are not seperated by '-' or '/'. So I write this function to convert it to the date format. The idea is to use `str_sub` to read and store year, month and day and bind them together in the year-month-day format.
 
 ```{r import_homicide}
-# data import
 
 # a function to change the date variable to a certain "date format"
 date_format <- function(date){
@@ -79,6 +80,14 @@ date_format <- function(date){
   f_date
 }
 
+```
+
+This might not be necessary in this problem. However, it is part of the data cleaning. And if we need to analyze data over time, this conversion will be required.  
+  
+Import data and data cleaning. 
+
+```{r}
+
 homicide <- read_csv('./data-homicides-master/homicide-data.csv') %>% 
   mutate(reported_date = date_format(reported_date),
          victim_age = as.numeric(victim_age),
@@ -86,6 +95,24 @@ homicide <- read_csv('./data-homicides-master/homicide-data.csv') %>%
          status = ifelse(disposition == 'Closed by arrest', 1, 0)) %>% 
   select(uid, reported_date, city_state, everything())
 
+```
+
+**This process includes:**    
+* Change variables into more proper types, such as string to date variable (reported_date), string to numeric (age)  
+* Create a new variable called city_state. This is done by binding city and state using str_c.  
+* Create a variable that tell me the category of each case: 1 = Closed by arrest, 0 = Closed without arrest or Open/No arrest.  
+
+**About the raw data:**   
+* This dataset contains demographic information of the vicitim and the site where the murder happened. There are `r nrow(homicide)` rows and `r ncol(homicide)` variables.  
+* Demographic information of the victim include: name, race, age, gender  
+* Location information include: state, city, longitude and latitude.  
+* There is a variable "disposition" that describes the status of the case. It can be closed without arrest, closed by arrest or open/no arrest.  
+
+#### Prop.test
+
+To make prop.test easier, I create a new dataset "city_homicide" which sums up 0 and 1 cases and give me the total number as well. Notice that there is a duplicate "Tulsa, AL" which has missing data. This is probably a typo. I will remove it.
+
+```{r}
 # this dataset has the number of cases for each disposition summed by cities in a readable format
 city_homicide <- homicide %>% 
   group_by(city_state, status) %>% 
@@ -96,20 +123,24 @@ city_homicide <- homicide %>%
   mutate(total = unsolved + solved) %>% 
   filter(city_state != 'Tulsa, AL')
 
+```
+
+Take a look at the sums of cases in every `city_state`.
+
+```{r}
+
 # visualize in ggplot
 city_homicide %>% 
   gather(key = status, value = n_cases, unsolved:total) %>% 
   filter(status == 'solved' | status == 'unsolved') %>% 
-  ggplot(aes(x = city_state, y = n_cases, fill = status)) + geom_bar(stat = 'identity') +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  ggplot(aes(x = reorder(city_state, n_cases), y = n_cases, fill = status)) + geom_bar(stat = 'identity') +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
 
 ```
 
-* This dataset contains demographic information of the vicitim and the site where the murder happened. There are `r nrow(homicide)` rows and `r ncol(homicde)` variables.  
-* Demographic information of the victim include: name, race, age, gender  
-* Location information include: state, city, longitude and latitude.  
-* There is a variable "disposition" that describes the status of the case. It can be closed without arrest, closed by arrest or open/no arrest.  
+Chicago has the most number of homicide cases and a high unsolved proportion. 
 
+Try `prop.test` for Baltimore, MD:
 
 ```{r}
 # Baltimore subset
@@ -121,15 +152,25 @@ baltimore_prop <- prop.test(city_homicide_baltimore$unsolved, city_homicide_balt
 
 # estimate and confidence intervals
 baltimore_prop %>% 
-  select(estimate, conf.low, conf.high)
+  select(estimate, conf.low, conf.high) %>% 
+  knitr::kable()
 
+```
+
+To iterate over all the cities, I write a function to do prop.test for each city_state and tidy the results.  
+
+```{r}
 # a function to do the prop.test and tidy the results
 prop_tidy <- function(x, n){
   
   output = prop.test(x,n)
   broom::tidy(output)
 }
+```
 
+Use `map2` which has two inputs: unsolved cases and total cases. Use `unnest()` to tidy the results into a data frame format.
+
+```{r}
 # using map to iterate on each row
 homicide_prop <- city_homicide %>% 
   mutate(
@@ -137,18 +178,24 @@ homicide_prop <- city_homicide %>%
   ) %>% 
   unnest() %>% 
   select(city_state:estimate, conf.low, conf.high)
+```
 
+Plot estimates and CIs:
+
+```{r}
 # plotting estimate and CIs
 homicide_prop %>% 
   ggplot(aes(x = reorder(city_state, estimate), y = estimate)) +
   geom_point() +
   geom_errorbar(aes(ymin = conf.low, ymax = conf.high)) +
-  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+  theme(axis.text.x = element_text(angle = 60, hjust = 1)) +
+  labs(
+    title = 'Estimates and 95% confidence intervals of the proportion of unsolved homicide cases across 50 major cities',
+    x = 'City and state',
+    y = 'Estimate and 95% confidence interval'
+  )
   
 ```
 
-
-
-
-
+This map is a bit different from the bar chart above. Chicago is the city with the most homicide cases and the highest proprotion of unsolved cases.
 
